@@ -97,6 +97,167 @@ GitHub artifacts are automatically deleted after 90 days. If you need longer ret
 
 ## Security Considerations
 
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# MongoDB Daily Backup
+
+This GitHub Actions workflow automatically creates daily backups of a specific MongoDB collection and stores them as GitHub artifacts.
+
+## What This Workflow Does
+
+This workflow performs the following operations:
+
+1. **Scheduled Execution**: Runs daily at 4:30 AM UTC
+2. **MongoDB Tools Installation**: Downloads and installs the MongoDB database tools
+3. **Database Export**: Uses `mongoexport` to create a backup of the "jobs" collection from the "fcau" database
+4. **Artifact Storage**: Saves the backup file as a GitHub artifact with a date-stamped name
+
+## Workflow Breakdown
+
+### Scheduling
+```yaml
+on:
+  schedule:
+    - cron: '30 4 * * *'
+```
+This section schedules the workflow to run at 4:30 AM UTC every day. The cron expression `'30 4 * * *'` represents: minute 30, hour 4, any day of month, any month, any day of week.
+
+### Job Configuration
+```yaml
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+```
+The workflow uses Ubuntu as the runner environment to perform the backup operations.
+
+### Workflow Steps
+
+#### 1. Checkout Repository
+```yaml
+- name: Checkout Repo
+  uses: actions/checkout@v3
+```
+This step checks out your repository code to the runner. This is necessary for the workflow to access any scripts or configurations in your repository.
+
+#### 2. Install MongoDB Tools
+```yaml
+- name: Install MongoDB Tools
+  run: |
+    wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2004-x86_64-100.9.0.tgz
+    tar -xvzf mongodb-database-tools-*.tgz
+    sudo mv mongodb-database-tools-*/bin/* /usr/local/bin/
+```
+This step:
+- Downloads the MongoDB database tools package (version 100.9.0 for Ubuntu 20.04)
+- Extracts the tools from the downloaded archive
+- Moves the executable tools to a directory in the system PATH for easy access
+
+#### 3. Run MongoDB Backup
+```yaml
+- name: Run MongoDB Backup
+  run: |
+    mongoexport --uri="${{ secrets.MONGO_URI }}" --db="fcau" --collection="jobs" --out=backup_$(date +%Y-%m-%d).json --jsonArray
+```
+This step:
+- Uses `mongoexport` to connect to your MongoDB instance using the connection string stored in the GitHub secret `MONGO_URI`
+- Targets the "jobs" collection in the "fcau" database
+- Exports the data to a JSON file with today's date in the filename (format: backup_YYYY-MM-DD.json)
+- Uses the `--jsonArray` flag to format the output as a JSON array
+
+#### 4. Set Artifact Name
+```yaml
+- name: Set Artifact Name
+  id: set-artifact-name
+  run: echo "ARTIFACT_NAME=mongo_backup_$(date +%Y-%m-%d)" >> $GITHUB_ENV
+```
+This step:
+- Creates an environment variable called `ARTIFACT_NAME` with a value that includes today's date
+- The format is "mongo_backup_YYYY-MM-DD"
+- This variable will be used to name the GitHub artifact
+
+#### 5. Upload Backup as Artifact
+```yaml
+- name: Upload to GitHub Artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: ${{ env.ARTIFACT_NAME }}
+    path: backup_*
+```
+This step:
+- Uses the GitHub Actions upload-artifact@v4 action
+- Names the artifact using the environment variable set in the previous step
+- Uploads all files that match the pattern "backup_*" (which will include our dated backup file)
+
+## Setup Instructions
+
+### 1. Add the Workflow File
+
+Place this workflow file in your repository under `.github/workflows/mongodb-daily-backup.yml`.
+
+### 2. Configure GitHub Secret
+
+You must set up the following secret in your GitHub repository:
+
+| Secret Name | Description |
+|-------------|-------------|
+| `MONGO_URI` | MongoDB connection string with authorization credentials |
+
+The MongoDB URI typically follows this format:
+```
+mongodb+srv://username:password@hostname/database?options
+```
+
+To add this secret:
+1. Go to your GitHub repository
+2. Click on "Settings" > "Secrets and variables" > "Actions"
+3. Click "New repository secret"
+4. Name: `MONGO_URI`
+5. Value: Your MongoDB connection string
+
+### 3. Accessing Backup Files
+
+Backup files are stored as GitHub artifacts:
+1. Go to your GitHub repository
+2. Click on "Actions"
+3. Find and click on the completed workflow run
+4. Scroll down to the "Artifacts" section
+5. Download the artifact named `mongo_backup_YYYY-MM-DD`
+
+## Customization Options
+
+### Backing Up Different Collections
+
+To back up a different collection, modify the `mongoexport` command:
+
+```yaml
+mongoexport --uri="${{ secrets.MONGO_URI }}" --db="your_database" --collection="your_collection" --out=backup_$(date +%Y-%m-%d).json --jsonArray
+```
+
+### Changing the Backup Format
+
+For BSON format instead of JSON:
+
+```yaml
+mongodump --uri="${{ secrets.MONGO_URI }}" --db="fcau" --collection="jobs" --out=backup_$(date +%Y-%m-%d)
+```
+
+### Changing the Backup Schedule
+
+Modify the cron expression to change when the backup runs:
+
+```yaml
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs at midnight UTC daily
+```
+
+## Important Notes
+
+- GitHub artifacts are automatically deleted after 90 days
+- For long-term storage, consider modifying the workflow to push backups to external storage
+- The MongoDB connection string contains sensitive credentials, so it must be stored as a secret
+
 - The MySQL password is stored as a GitHub Secret and is masked in logs
 - Consider using a dedicated backup user with minimal permissions (SELECT, LOCK TABLES, SHOW VIEW, TRIGGER)
 - Avoid storing sensitive data in GitHub artifacts for extended periods
