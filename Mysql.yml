@@ -1,0 +1,40 @@
+name: MySQL Daily Backup
+
+on:
+  schedule:
+    - cron: '30 4 * * *'  # Runs at 4:30 AM UTC daily
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+      
+      - name: Install MySQL Client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+      
+      - name: Run MySQL Backup
+        run: |
+          # Create a backup directory
+          mkdir -p backups
+          
+          # Using mysqldump to export the database
+          mysqldump \
+            --host=${{ secrets.MYSQL_HOST }} \
+            --user=${{ secrets.MYSQL_USER }} \
+            --password=${{ secrets.MYSQL_PASSWORD }} \
+            --databases ${{ secrets.MYSQL_DATABASE }} \
+            --result-file=backups/backup_$(date +%Y-%m-%d).sql
+      
+      - name: Set Artifact Name
+        id: set-artifact-name
+        run: echo "ARTIFACT_NAME=mysql_backup_$(date +%Y-%m-%d)" >> $GITHUB_ENV
+      
+      - name: Upload to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: backups/backup_*

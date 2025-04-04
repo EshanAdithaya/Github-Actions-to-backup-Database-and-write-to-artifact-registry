@@ -1,0 +1,32 @@
+name: MongoDB Daily Backup
+
+on:
+  schedule:
+    - cron: '30 4 * * *'
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Install MongoDB Tools
+        run: |
+          wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2004-x86_64-100.9.0.tgz
+          tar -xvzf mongodb-database-tools-*.tgz
+          sudo mv mongodb-database-tools-*/bin/* /usr/local/bin/
+
+      - name: Run MongoDB Backup
+        run: |
+          mongoexport --uri="${{ secrets.MONGO_URI }}" --db="fcau" --collection="jobs" --out=backup_$(date +%Y-%m-%d).json --jsonArray
+
+      - name: Set Artifact Name
+        id: set-artifact-name
+        run: echo "ARTIFACT_NAME=mongo_backup_$(date +%Y-%m-%d)" >> $GITHUB_ENV
+
+      - name: Upload to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: backup_*
